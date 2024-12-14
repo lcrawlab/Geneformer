@@ -2,7 +2,7 @@
 datasets: ctheodoris/Genecorpus-30M
 license: apache-2.0
 ---
-# This is a fork of Geneformer that has minor changes used in [this project]([https://rdcu.be/ddrx0](https://github.com/microsoft/scFM-dataselection/]), do not use this if you want to use Geneformer for your own purposes!
+# This is a fork of Geneformer that has minor changes used in [this project](https://github.com/microsoft/scFM-dataselection/), do not use this if you want to use Geneformer for your own purposes!
 
 
 # Geneformer
