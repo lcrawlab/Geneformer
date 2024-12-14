@@ -52,7 +52,8 @@ import loompy as lp  # noqa
 
 logger = logging.getLogger(__name__)
 
-from .perturber_utils import GENE_MEDIAN_FILE, TOKEN_DICTIONARY_FILE
+GENE_MEDIAN_FILE = Path(__file__).parent / "gene_median_dictionary.pkl"
+TOKEN_DICTIONARY_FILE = Path(__file__).parent / "token_dictionary.pkl"
 
 
 def rank_genes(gene_vector, gene_tokens):
@@ -102,7 +103,7 @@ class TranscriptomeTokenizer:
         model_input_size : int = 2048
             | Max input size of model to truncate input to.
         special_token : bool = False
-            | Adds CLS token before and EOS token after rank value encoding.
+            | Adds CLS token before and SEP token after rank value encoding.
         gene_median_file : Path
             | Path to pickle file containing dictionary of non-zero median
             | gene expression values across Genecorpus-30M.
@@ -122,7 +123,7 @@ class TranscriptomeTokenizer:
         # input size for tokenization
         self.model_input_size = model_input_size
 
-        # add CLS and EOS tokens
+        # add CLS and SEP tokens
         self.special_token = special_token
 
         # load dictionary of gene normalization factors
@@ -166,7 +167,7 @@ class TranscriptomeTokenizer:
 
         """
         tokenized_cells, cell_metadata = self.tokenize_files(
-            Path(data_directory), file_format
+            data_directory, file_format
         )
         tokenized_dataset = self.create_dataset(
             tokenized_cells,
@@ -175,7 +176,7 @@ class TranscriptomeTokenizer:
         )
 
         output_path = (Path(output_directory) / output_prefix).with_suffix(".dataset")
-        tokenized_dataset.save_to_disk(str(output_path))
+        tokenized_dataset.save_to_disk(output_path)
 
     def tokenize_files(
         self, data_directory, file_format: Literal["loom", "h5ad"] = "loom"
@@ -193,28 +194,28 @@ class TranscriptomeTokenizer:
         tokenize_file_fn = (
             self.tokenize_loom if file_format == "loom" else self.tokenize_anndata
         )
-        for file_path in data_directory.glob(f"*.{file_format}"):
-            file_found = 1
-            print(f"Tokenizing {file_path}")
-            file_tokenized_cells, file_cell_metadata = tokenize_file_fn(file_path)
-            tokenized_cells += file_tokenized_cells
-            if self.custom_attr_name_dict is not None:
-                for k in cell_attr:
-                    cell_metadata[self.custom_attr_name_dict[k]] += file_cell_metadata[
-                        k
-                    ]
-            else:
-                cell_metadata = None
+        # for file_path in data_directory.glob(f"*.{file_format}"):
+        #     file_found = 1
+        #     print(f"Tokenizing {file_path}")
+        file_tokenized_cells, file_cell_metadata = tokenize_file_fn(data_directory)
+        tokenized_cells += file_tokenized_cells
+        if self.custom_attr_name_dict is not None:
+            for k in cell_attr:
+                cell_metadata[self.custom_attr_name_dict[k]] += file_cell_metadata[
+                    k
+                ]
+        else:
+            cell_metadata = None
 
-        if file_found == 0:
-            logger.error(
-                f"No .{file_format} files found in directory {data_directory}."
-            )
-            raise
+        # if file_found == 0:
+        #     logger.error(
+        #         f"No .{file_format} files found in directory {data_directory}."
+        #     )
+        #     raise
         return tokenized_cells, cell_metadata
 
-    def tokenize_anndata(self, adata_file_path, target_sum=10_000):
-        adata = ad.read(adata_file_path, backed="r")
+    def tokenize_anndata(self, adata, target_sum=10_000):
+        # adata = ad.read(adata_file_path, backed="r")
 
         if self.custom_attr_name_dict is not None:
             file_cell_metadata = {
@@ -227,10 +228,10 @@ class TranscriptomeTokenizer:
         norm_factor_vector = np.array(
             [
                 self.gene_median_dict[i]
-                for i in adata.var["ensembl_id"][coding_miRNA_loc]
+                for i in adata.var["ensembl_id"].iloc[coding_miRNA_loc]
             ]
         )
-        coding_miRNA_ids = adata.var["ensembl_id"][coding_miRNA_loc]
+        coding_miRNA_ids = adata.var["ensembl_id"].iloc[coding_miRNA_loc]
         coding_miRNA_tokens = np.array(
             [self.gene_token_dict[i] for i in coding_miRNA_ids]
         )
@@ -246,11 +247,14 @@ class TranscriptomeTokenizer:
             filter_pass_loc = np.where([i == 1 for i in adata.obs["filter_pass"]])[0]
         elif not var_exists:
             print(
-                f"{adata_file_path} has no column attribute 'filter_pass'; tokenizing all cells."
+                f"adata has no column attribute 'filter_pass'; tokenizing all cells."
             )
             filter_pass_loc = np.array([i for i in range(adata.shape[0])])
 
         tokenized_cells = []
+
+        print("test to make sure this script is used")
+        #import pdb; pdb.set_trace()
 
         for i in range(0, len(filter_pass_loc), self.chunk_size):
             idx = filter_pass_loc[i : i + self.chunk_size]
@@ -271,7 +275,7 @@ class TranscriptomeTokenizer:
                     file_cell_metadata[k] += adata[idx].obs[k].tolist()
             else:
                 file_cell_metadata = None
-
+            
         return tokenized_cells, file_cell_metadata
 
     def tokenize_loom(self, loom_file_path, target_sum=10_000):
@@ -377,14 +381,14 @@ class TranscriptomeTokenizer:
             if self.special_token:
                 example["input_ids"] = example["input_ids"][
                     0 : self.model_input_size - 2
-                ]  # truncate to leave space for CLS and EOS token
+                ]  # truncate to leave space for CLS and SEP token
                 example["input_ids"] = np.insert(
                     example["input_ids"], 0, self.gene_token_dict.get("<cls>")
                 )
                 example["input_ids"] = np.insert(
                     example["input_ids"],
                     len(example["input_ids"]),
-                    self.gene_token_dict.get("<eos>"),
+                    self.gene_token_dict.get("<sep>"),
                 )
             else:
                 # Truncate/Crop input_ids to input size
