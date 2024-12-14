@@ -2,6 +2,9 @@
 datasets: ctheodoris/Genecorpus-30M
 license: apache-2.0
 ---
+# This is a fork of Geneformer that has minor changes used in [this project]([https://rdcu.be/ddrx0](https://github.com/microsoft/scFM-dataselection/]), do not use this if you want to use Geneformer for your own purposes!
+
+
 # Geneformer
 Geneformer is a foundation transformer model pretrained on a large-scale corpus of ~30 million single cell transcriptomes to enable context-aware predictions in settings with limited data in network biology.
 
